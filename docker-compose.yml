@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  smtp-code-service:
+    build: .
+    container_name: smtp-code-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+      - "25:25"
+    environment:
+      - DOMAIN=example.com
+      - API_TOKEN=your-token-here
+    volumes:
+      - ./data:/var/lib/smtp-code-service
