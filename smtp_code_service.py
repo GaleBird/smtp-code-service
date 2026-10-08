@@ -272,6 +272,8 @@ async def get_code_handler(request: "web.Request"):
     mailbox = normalize_mailbox(str(request.query.get("email") or request.query.get("mailbox") or ""))
     if not mailbox:
         return web.json_response({"error": "mailbox is required"}, status=400)
+    if "@" not in mailbox:
+        mailbox = f"{mailbox}@{config.default_domain}"
     record = store.latest_code(mailbox)
     if not record:
         return web.json_response({"error": "No OTP found", "mailbox": mailbox}, status=404)
@@ -1105,7 +1107,7 @@ html.light .email-text-view {
     <div class="header-center">
       <div class="search-box">
         <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input id="emailInput" type="email" placeholder="输入邮箱地址，例如 user@example.com..." autocomplete="off" spellcheck="false" />
+        <input id="emailInput" type="email" placeholder="输入邮箱地址或前缀，例如 lghagl..." autocomplete="off" spellcheck="false" />
         <button class="search-btn" onclick="loadInbox()">查看</button>
       </div>
     </div>
@@ -1147,6 +1149,16 @@ html.light .email-text-view {
 
 <script>
 const $ = id => document.getElementById(id);
+const DEFAULT_DOMAIN = "__DEFAULT_DOMAIN__";
+function resolveMailbox(input){
+  let val = String(input || '').trim().toLowerCase();
+  if(!val) return '';
+  if(!val.includes('@')){
+    const dom = (DEFAULT_DOMAIN && !DEFAULT_DOMAIN.startsWith('__')) ? DEFAULT_DOMAIN : 'example.com';
+    val = `${val}@${dom}`;
+  }
+  return val;
+}
 let currentMailbox = '', currentMsgId = null, pollTimer = null;
 let currentMessageData = null;
 let headerDetailsExpanded = false;
@@ -1229,17 +1241,53 @@ function extractLinks(html){
 }
 
 function htmlToText(html){
+  if (!html) return '';
   let s = html
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(?:p|div|tr|li|h[1-6]|blockquote)>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n))
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n');
-  return s.trim();
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '');
+  s = s.replace(/<(?:br|hr)\s*\/?>/gi, '\n')
+       .replace(/<\/?(?:p|div|tr|h[1-6]|table|blockquote|section|article)\b[^>]*>/gi, '\n')
+       .replace(/<li\b[^>]*>/gi, '\n• ')
+       .replace(/<\/li>/gi, '\n')
+       .replace(/<td\b[^>]*>/gi, ' ')
+       .replace(/<\/td>/gi, ' ');
+  s = s.replace(/<[^>]+>/g, '');
+  s = s.replace(/&nbsp;/g, ' ')
+       .replace(/&amp;/g, '&')
+       .replace(/&lt;/g, '<')
+       .replace(/&gt;/g, '>')
+       .replace(/&quot;/g, '"')
+       .replace(/&#39;/g, "'")
+       .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n))
+       .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)));
+
+  const rawLines = s.split('\n');
+  const lines = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i].replace(/[ \t\u00a0\u3000]+/g, ' ').trim();
+    lines.push(line);
+  }
+
+  const cleaned = [];
+  let prevEmpty = true;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line) {
+      if (!prevEmpty) {
+        cleaned.push('');
+        prevEmpty = true;
+      }
+    } else {
+      cleaned.push(line);
+      prevEmpty = false;
+    }
+  }
+
+  while (cleaned.length && !cleaned[cleaned.length - 1]) {
+    cleaned.pop();
+  }
+
+  return cleaned.join('\n');
 }
 
 function prepareEmailHtml(rawHtml){
@@ -1274,9 +1322,10 @@ function prepareEmailHtml(rawHtml){
 }
 
 async function loadInbox(quiet = false){
-  const email = $('emailInput').value.trim().toLowerCase();
-  if(!email){ if(!quiet) showToast('请输入邮箱地址'); return; }
-  if(!email.includes('@')){ if(!quiet) showToast('邮箱格式不正确'); return; }
+  const rawInput = $('emailInput').value.trim();
+  if(!rawInput){ if(!quiet) showToast('请输入邮箱地址或前缀'); return; }
+  const email = resolveMailbox(rawInput);
+  $('emailInput').value = email;
   currentMailbox = email;
   $('mailboxAddr').textContent = currentMailbox;
   $('sidebarHead').style.display = 'block';
@@ -1513,7 +1562,8 @@ $('emailInput').addEventListener('keydown', e => {
 // URL Param Auto Load
 const urlEmail = new URLSearchParams(location.search).get('email');
 if(urlEmail){
-  $('emailInput').value = urlEmail;
+  const email = resolveMailbox(urlEmail);
+  $('emailInput').value = email;
   loadInbox();
 }
 
@@ -1549,15 +1599,20 @@ applyTheme(localStorage.getItem('theme') || 'dark');
 
 async def ui_index_handler(request: "web.Request"):
     from aiohttp import web
-    return web.Response(text=WEB_UI_HTML, content_type="text/html", charset="utf-8")
+    config: ServiceConfig = request.app["config"]
+    page = WEB_UI_HTML.replace("__DEFAULT_DOMAIN__", config.default_domain)
+    return web.Response(text=page, content_type="text/html", charset="utf-8")
 
 
 async def ui_messages_handler(request: "web.Request"):
     from aiohttp import web
+    config: ServiceConfig = request.app["config"]
     store: MessageStore = request.app["store"]
     mailbox = normalize_mailbox(str(request.query.get("mailbox", "")))
     if not mailbox:
         return web.json_response({"error": "mailbox required"}, status=400)
+    if "@" not in mailbox:
+        mailbox = f"{mailbox}@{config.default_domain}"
     msgs = store.list_mailbox_messages(mailbox, limit=50)
     return web.json_response({"mailbox": mailbox, "messages": msgs})
 
