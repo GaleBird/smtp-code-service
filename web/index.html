@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlashMail</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+  <header class="app-header">
+    <div class="header-brand">
+      <span class="brand-name">Flash</span><span class="brand-suffix">Mail</span>
+    </div>
+    <div class="header-center">
+      <div class="search-box">
+        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="emailInput" type="email" placeholder="输入邮箱地址或前缀，例如 user..." autocomplete="off" spellcheck="false" />
+        <button class="search-btn" onclick="loadInbox()">查看</button>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" onclick="toggleTheme()" id="themeBtn" title="切换深浅主题">
+        <svg id="themeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <aside class="sidebar">
+      <div class="sidebar-header" id="sidebarHead" style="display:none">
+        <div class="sidebar-header-row">
+          <span class="sidebar-title">收件箱</span>
+          <button class="icon-btn-ghost" onclick="manualRefresh()" id="refreshBtn" title="刷新收件箱 (每8秒自动同步)">
+            <svg id="refreshIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          </button>
+        </div>
+        <div class="mailbox-info" onclick="copyAddr()" title="点击复制完整邮箱地址">
+          <span class="mailbox-email" id="mailboxAddr"></span>
+          <span class="mailbox-dot">·</span>
+          <span class="mailbox-count" id="msgCount">0</span>
+          <svg class="copy-hint-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </div>
+      </div>
+      <div class="mail-list" id="msgList">
+        <div class="empty-list">输入邮箱地址查看邮件</div>
+      </div>
+    </aside>
+
+    <section class="mail-detail" id="detail">
+      <div class="detail-placeholder">选择左侧邮件以阅读</div>
+    </section>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  window.DEFAULT_DOMAIN = "__DEFAULT_DOMAIN__";
+</script>
+<script src="/static/app.js"></script>
+</body>
+</html>

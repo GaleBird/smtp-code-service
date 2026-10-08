@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   smtp-code-service:
     build: .
@@ -11,5 +9,6 @@ services:
     environment:
       - DOMAIN=example.com
       - API_TOKEN=your-token-here
+      - DB_PATH=/var/lib/smtp-code-service/messages.db
     volumes:
       - ./data:/var/lib/smtp-code-service
